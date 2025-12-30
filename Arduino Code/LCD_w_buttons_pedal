@@ -1,0 +1,122 @@
+#include <Wire.h> 
+/*
+Arduino 2x16 LCD - Detect Buttons
+modified on 18 Feb 2019
+by Saeed Hosseini @ Electropeak
+https://electropeak.com/learn/
+*/
+#include <LiquidCrystal.h>
+//LCD pin to Arduino
+const int pin_RS = 8; 
+const int pin_EN = 9; 
+const int pin_d4 = 4; 
+const int pin_d5 = 5; 
+const int pin_d6 = 6; 
+const int pin_d7 = 7; 
+const int pin_BL = 10; 
+LiquidCrystal lcd( pin_RS,  pin_EN,  pin_d4,  pin_d5,  pin_d6,  pin_d7);
+
+
+//Assingning Analog Pins
+
+const int FrequencyPin = 1;               //Pin that sets the maximun frequency (ANALOG)
+const int PercentagePin = 2;              //Pin from percentage of the cycle that turns the solenoid on (ANALOG)
+const int testpin = 5;
+const int bttn = 0;
+
+
+//Assigning digital Pins
+
+int bttnval;
+int currentval = 0;
+int bttnstate;
+int lastbttnstate;
+int pedalval;
+
+//const int VariablePedalPin = 2;              // Pin to select variable pedal mode (DIGITAL)
+//const int SelectedInputPin = 3;                //Pin to select potentiometer mode (DIGITAL)
+///const int PulsesPin = 4;              //Pin to select pulses pedal mode (DIGITAL)
+//const int MosfetPin = 9;                  // the number of the LED pin (DIGITAL)
+//const int DigitalFootPedalPin = 10;       //Pin of the foot pedal potentiometer (DIGITAL)
+
+
+//Assigning variables
+
+float PeriodMosfet  = 0;                  //Time between the impacts its a ratio between 1/frequency
+float FrequencyMosfet = 1;                //Frequency in hertz of the impacts means impacts per second
+float PercentageMosfet = 5;              //Percentage of the cycle that turns the solenoid on
+float FootPedal = 0;                      //State of the foot pedal
+float AnalogPedal = 0;                    //Defines the analog value of the varible pedal
+float TimeForPulses = 1000;               //Base time for pulses on pulse mode
+float StartOfPulses;                      //Marker for start of pulses
+float DutyRead;                           //Duty cycle
+float Correction;                          //Correction value for different solenoids
+int DirectFrequency=1;                  //Value for the frequency on direct mode
+
+int Mode=2;                                 //Mode of action starts at the mode you've defined below 
+int MosfetState = LOW;                    //Mosfet state for the action High means activated Low deactivated
+
+int LastVariableState = LOW;
+int VariableState;
+long LastDebounceMode = 0;                // the last time the output pin was toggled
+int LastSelectedInputRead = LOW;
+int SelectedInputState;
+long LastDebounceSelectedInput = 0;                              
+int LastPulsesState = LOW;
+int DownState;
+long LastDebouncePulses = 0;
+long LastDebounceLCD = 0;
+unsigned long CurrentTime = 0;
+unsigned long PreviousTime = 0;
+
+
+long debounceDelay = 100;                  // the debounce time; increase if the output flickers
+
+void setup() {
+  //pinMode (SelectedInputPin, INPUT);
+  //pinMode(MosfetPin, OUTPUT);             //Set solenoid pin as output to Mosfet
+  Serial.begin(115200);                   //Higher baudrate to get millis acuratelly
+
+  //LCD Startup
+  lcd.begin(16, 2);
+  }
+
+
+void readbutton(){
+  bttnval = analogRead (bttn);
+
+    if (bttnval != lastbttnstate) {              //Reading the state for the up Button
+    // reset the debouncing timer
+    LastDebounceSelectedInput = millis();
+    //Serial.println(VariableState);
+  } 
+    if ((millis() - LastDebounceMode) > debounceDelay) {
+    // if the button state has changed:
+    if (bttnval != bttnstate) {
+      bttnstate = bttnval;
+      if (bttnstate < 200 && bttnstate < 1023) {
+        Mode = Mode +1;
+      }
+      if (bttnstate > 200 && bttnstate < 400){
+        Mode = Mode -1;
+      }
+      if (Mode >= 2){
+          Mode = 2;
+      }
+      else if (Mode <= 0){
+        Mode = 0;
+      }
+    }
+  }
+  lastbttnstate = bttnval;
+}
+
+void loop() {
+  readbutton();
+  lcd.setCursor(0,0);
+  lcd.print(Mode);
+  AnalogPedal = map(round(analogRead(A5)),0,1024,0,255);
+  lcd.setCursor(0,1);
+  lcd.print("Pedalval= ");
+  lcd.print(AnalogPedal);
+}      //Loop end
