@@ -20,8 +20,9 @@ LiquidCrystal lcd( pin_RS,  pin_EN,  pin_d4,  pin_d5,  pin_d6,  pin_d7);
 //Assingning Analog Pins
 
 const int FrequencyPin = 1;               //Pin that sets the maximun frequency (ANALOG)
-const int PercentagePin = 2;              //Pin from percentage of the cycle that turns the solenoid on (ANALOG)
-const int testpin = 5;
+const int DutyPin = 2;              //Pin from percentage of the cycle that turns the solenoid on (ANALOG)
+const int PWMPin = 3;              //Pin from percentage of the cycle that turns the solenoid on (ANALOG)
+const int pedalpin = 5;
 const int bttn = 0;
 
 
@@ -33,11 +34,7 @@ int bttnstate;
 int lastbttnstate;
 int pedalval;
 
-//const int VariablePedalPin = 2;              // Pin to select variable pedal mode (DIGITAL)
-//const int SelectedInputPin = 3;                //Pin to select potentiometer mode (DIGITAL)
-///const int PulsesPin = 4;              //Pin to select pulses pedal mode (DIGITAL)
 //const int MosfetPin = 9;                  // the number of the LED pin (DIGITAL)
-//const int DigitalFootPedalPin = 10;       //Pin of the foot pedal potentiometer (DIGITAL)
 
 
 //Assigning variables
@@ -52,33 +49,40 @@ float StartOfPulses;                      //Marker for start of pulses
 float DutyRead;                           //Duty cycle
 float Correction;                          //Correction value for different solenoids
 int DirectFrequency=1;                  //Value for the frequency on direct mode
+int PWMValue=0;                   //PWM to correct for lower voltages solenoids.
+int MaxFrequency;                   //Maximum frequency for the pedal
 
-int Mode=2;                                 //Mode of action starts at the mode you've defined below 
+int Mode;                                 //Mode of action starts at the mode you've defined below 
 int MosfetState = LOW;                    //Mosfet state for the action High means activated Low deactivated
 
 int LastVariableState = LOW;
 int VariableState;
 long LastDebounceMode = 0;                // the last time the output pin was toggled
+
 int LastSelectedInputRead = LOW;
 int SelectedInputState;
 long LastDebounceSelectedInput = 0;                              
+
 int LastPulsesState = LOW;
 int DownState;
 long LastDebouncePulses = 0;
+
 long LastDebounceLCD = 0;
+
+
 unsigned long CurrentTime = 0;
 unsigned long PreviousTime = 0;
 
 
-long debounceDelay = 100;                  // the debounce time; increase if the output flickers
+long debounceDelay = 50;                  // the debounce time; increase if the output flickers
 
 void setup() {
-  //pinMode (SelectedInputPin, INPUT);
   //pinMode(MosfetPin, OUTPUT);             //Set solenoid pin as output to Mosfet
   Serial.begin(115200);                   //Higher baudrate to get millis acuratelly
-
   //LCD Startup
   lcd.begin(16, 2);
+  lcd.setCursor(0,0);
+  WriteOnLCD();
   }
 
 
@@ -111,12 +115,132 @@ void readbutton(){
   lastbttnstate = bttnval;
 }
 
+
+void WriteOnLCD(){          //Function that will be called to write the information on the LCD
+  lcd.clear();
+  lcd.setCursor(5,0);
+  if (Mode==1){
+    lcd.print("Pulses     ");
+  }
+  if(Mode==0){
+    lcd.print("Potenti    ");
+  }
+  if(Mode==2){
+    lcd.print("Direct    ");
+  }
+  lcd.setCursor(0,1);
+  lcd.print("Freq:  ");
+  lcd.setCursor(7,1);
+  lcd.print(FrequencyMosfet);
+  
+  
+}
+
 void loop() {
   readbutton();
-  lcd.setCursor(0,0);
-  lcd.print(Mode);
-  AnalogPedal = map(round(analogRead(A5)),0,1024,0,255);
-  lcd.setCursor(0,1);
-  lcd.print("Pedalval= ");
-  lcd.print(AnalogPedal);
+  Serial.println(Mode);
+  if (Mode==1){               //Pulses mode 
+    // read the state of the switch into a local variable
+    CurrentTime = millis();
+    //Serial.println(PercentageMosfet);
+    FrequencyMosfet = round(map(analogRead(FrequencyPin),0,1023,2,60));
+    AnalogPedal = map(round(analogRead(pedalpin)),0,1024,0,255);
+    DutyRead = (map(analogRead(DutyPin),0,1023,10,350));
+    PercentageMosfet = DutyRead/1000;;
+    PeriodMosfet = (1000/FrequencyMosfet);
+    PWMValue = int(map(analogRead(PWMPin),0,1023,50,255));
+
+    if (AnalogPedal>40){
+      if (CurrentTime - StartOfPulses <= TimeForPulses/2){
+
+        if(CurrentTime - PreviousTime >= PeriodMosfet){
+          PreviousTime+=PeriodMosfet;
+          //analogWrite(MosfetPin, PWMValue);
+        }
+      
+        if(CurrentTime - PreviousTime >= (PeriodMosfet*PercentageMosfet)) {
+          //analogWrite(MosfetPin, 0);
+        }
+      }
+      else if(CurrentTime - StartOfPulses >= TimeForPulses){
+        StartOfPulses=CurrentTime;
+        
+        //analogWrite(MosfetPin,0);
+      }
+      else{
+        //analogWrite(MosfetPin,0);
+      }
+    }
+    else{
+      //digitalWrite(MosfetPin,LOW);
+      StartOfPulses=CurrentTime;
+      WriteOnLCD(); 
+      
+      //Serial.println(StartOfPulses);
+    }
+  }      //Finish mode 0 (Pulses in a second)
+  
+  if (Mode==0){                   //Power selected on the pedal
+    CurrentTime = millis();
+    
+    FrequencyMosfet = map(analogRead(FrequencyPin),0,1023,2,60);
+    AnalogPedal = map(round(analogRead(pedalpin)),0,1024,0,255);
+    //Serial.println(PercentageMosfet);
+    DutyRead = (map(analogRead(DutyPin),0,1023,10,350));
+    PercentageMosfet = DutyRead/1000;
+    
+    PeriodMosfet = (1000/FrequencyMosfet);
+    
+    if (AnalogPedal>40){
+      if(CurrentTime - PreviousTime >= PeriodMosfet){
+        PreviousTime+=PeriodMosfet;
+        PWMValue = int(map(AnalogPedal,0,255,50,255));
+        //analogWrite(MosfetPin, PWMValue);
+
+      }
+    
+      if(CurrentTime - PreviousTime >= (PeriodMosfet*PercentageMosfet)) {
+        //analogWrite(MosfetPin, 0);
+      }
+    }
+    else{
+      //digitalWrite(MosfetPin,LOW);
+      StartOfPulses=CurrentTime;
+      PreviousTime=CurrentTime;
+     WriteOnLCD(); 
+    }    
+  }      //Finish mode 1 (Direct Potentiometer Mode)
+
+  if (Mode==2){                   //Frequency selected on the pedal
+    //CurrentTime = millis();
+    AnalogPedal = analogRead(pedalpin); //map(round(analogRead(A3)),0,1024,0,255);
+    MaxFrequency = map(analogRead(FrequencyPin),0,1023,30,60);
+    FrequencyMosfet = round(map(AnalogPedal,0,1023,0,MaxFrequency));
+    PWMValue = int(map(analogRead(PWMPin),0,1023,50,255));
+    
+    PeriodMosfet = 1000/FrequencyMosfet;
+    Correction = (map(analogRead(DutyPin),0,1023,1,10));  //The correction value is to accomodate different sizes of solenoid, it adjusts the curve of duty cycle up or down. Put two '/' at the begining if not using potentiometers and read line 240
+    //Correction = 10 //If you are not using the potentiometer to correct the value, please test with differents values of the correction and uncomment (Remove the two '/' on the begining of the line)
+    DutyRead = Correction*FrequencyMosfet + 4;
+    PercentageMosfet = DutyRead/1000;
+    if (AnalogPedal>20){
+      if(millis() - PreviousTime >= PeriodMosfet){
+        PreviousTime+=PeriodMosfet;
+        //analogWrite(MosfetPin, PWMValue);
+
+      }
+    
+      if(millis() - PreviousTime >= (PeriodMosfet*PercentageMosfet)) {
+        //analogWrite(MosfetPin, 0);
+      }
+    }
+    else{
+      //digitalWrite(MosfetPin,LOW);
+      StartOfPulses=millis();
+      PreviousTime=millis();
+      WriteOnLCD(); 
+    }    
+  }      //Finish mode 2 (Direct Frequency)
+
+
 }      //Loop end
