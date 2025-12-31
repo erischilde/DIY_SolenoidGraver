@@ -1,0 +1,87 @@
+#include <LiquidCrystal.h>
+
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
+
+int menuCounter = 0;
+const int totalOptions = 3;
+String menuOptions[totalOptions] = {"1. Direct Power", "2. Direct Freq", "3. Pulses"};
+
+// Debounce variables
+int lastButtonState = -1;     // -1 means no button pressed
+unsigned long lastDebounceTime = 0;
+unsigned long debounceDelay = 50; 
+
+void setup() {
+  lcd.begin(16, 2);
+  displayMenu();
+}
+
+void loop() {
+  int currentButton = get_debounced_button();
+
+  // Only act on the "Press" event (when state changes from -1 to a button value)
+  static int previousButton = -1;
+  if (currentButton != previousButton && currentButton != -1) {
+    handleInput(currentButton);
+  }
+  previousButton = currentButton;
+}
+
+// Function to convert Analog A0 to a button ID with debouncing
+int get_debounced_button() {
+  int rawReading = analogRead(0);
+  int buttonFound = -1;
+
+  if (rawReading < 60) buttonFound = 0;      // Right
+  else if (rawReading < 200) buttonFound = 1; // Up
+  else if (rawReading < 400) buttonFound = 2; // Down
+  else if (rawReading < 600) buttonFound = 3; // Left
+  else if (rawReading < 800) buttonFound = 4; // Select
+
+  // If the reading changed (noise or press), reset the timer
+  if (buttonFound != lastButtonState) {
+    lastDebounceTime = millis();
+  }
+
+  lastButtonState = buttonFound;
+
+  // Only return the button value if it has been stable for longer than debounceDelay
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    return buttonFound;
+  }
+  
+  return -1;
+}
+
+void handleInput(int btn) {
+  switch (btn) {
+    case 1: // Up
+      menuCounter = (menuCounter - 1 + totalOptions) % totalOptions;
+      displayMenu();
+      break;
+    case 2: // Down
+      menuCounter = (menuCounter + 1) % totalOptions;
+      displayMenu();
+      break;
+    case 4: // Select
+      executeAction();
+      displayMenu();
+      break;
+  }
+}
+
+void displayMenu() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("> " + menuOptions[menuCounter]);
+  lcd.setCursor(0, 1);
+  lcd.print("  " + menuOptions[(menuCounter + 1) % totalOptions]);
+}
+
+void executeAction() {
+  lcd.clear();
+  lcd.print("Executing...");
+  lcd.setCursor(0, 1);
+  lcd.print(menuOptions[menuCounter]);
+  delay(1500); 
+}
