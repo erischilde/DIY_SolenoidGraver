@@ -53,9 +53,9 @@ void loop() {
   }
 
   // 2. SENSOR CALCULATIONS (Keep outside timing for responsiveness)
-  FrequencyMosfet = map(analogRead(FrequencyPin), 0, 1023, 2, 60);
+  FrequencyMosfet = map(analogRead(FrequencyPin), 0, 1023, 60, 2);
   AnalogPedal = map(analogRead(PedalPin), 0, 1024, 0, 255);
-  DutyRead = map(analogRead(DutyPin), 0, 1023, 10, 350);
+  DutyRead = map(analogRead(DutyPin), 0, 1023, 350, 10);
   PercentageMosfet = DutyRead / 1000.0;
   PeriodMosfet = 1000.0 / FrequencyMosfet;
 
@@ -63,7 +63,10 @@ void loop() {
   if (AnalogPedal > 50) {
     if (CurrentTime - PreviousTime >= PeriodMosfet) {
       PreviousTime += PeriodMosfet;
-      PWMValue = map(AnalogPedal, 0, 255, 50, 255);
+      PWMValue = map(AnalogPedal, 0, 255, 0, 275);
+      if (PWMValue >= 255){
+        PWMValue = 255;
+      }
       analogWrite(MosfetPin, PWMValue);
     }
     if (CurrentTime - PreviousTime >= (PeriodMosfet * PercentageMosfet)) {
