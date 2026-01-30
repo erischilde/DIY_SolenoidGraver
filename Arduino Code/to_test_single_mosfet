@@ -1,0 +1,156 @@
+#include <LiquidCrystal.h>
+
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
+
+// Pins
+const int FrequencyPin = 2;
+const int DutyPin = 3;
+const int PedalPin = 5;
+const int MosfetPin = 6; // Only one MOSFET used for standard solenoid
+
+// Operating Modes
+enum Mode { STANDBY, ENGRAVE, CONT_HIT, SINGLE_SHOT };
+Mode currentMode = STANDBY;
+
+bool isLocked = false; 
+int lastButton = 5;
+unsigned long PreviousTime = 0;
+unsigned long previousLCDMillis = 0;
+const long lcdInterval = 150; 
+
+void setup() {
+  pinMode(MosfetPin, OUTPUT);
+  lcd.begin(16, 2);
+  Serial.begin(115200);
+}
+
+void loop() {
+  checkButtons();   
+  updateLCD();
+  
+  if (isLocked) {
+    stopSolenoid(); 
+    return;         
+  }
+
+  switch (currentMode) {
+    case STANDBY:     doStandby();    break;
+    case ENGRAVE:     doEngraving();  break; // High speed pulse
+    case CONT_HIT:    doContHit();    break; // Slow thumping
+    case SINGLE_SHOT: doSingleShot(); break;
+  }
+}
+
+// --- BUTTON LOGIC ---
+void checkButtons() {
+  int x = analogRead(0);
+  int currentButton;
+
+  if (x < 60) currentButton = 0;      // Right
+  else if (x < 200) currentButton = 1; // Up
+  else if (x < 400) currentButton = 2; // Down
+  else if (x < 600) currentButton = 3; // Left
+  else if (x < 800) currentButton = 4; // Select
+  else currentButton = 5;             // None
+
+  if (currentButton != lastButton && currentButton != 5) {
+    if (currentButton == 4) { isLocked = !isLocked; lcd.clear(); }
+    if (!isLocked) {
+      if (currentButton == 1) { 
+        currentMode = (currentMode == SINGLE_SHOT) ? STANDBY : (Mode)(currentMode + 1);
+        lcd.clear();
+      }
+      if (currentButton == 2) { 
+        currentMode = (currentMode == STANDBY) ? SINGLE_SHOT : (Mode)(currentMode - 1);
+        lcd.clear();
+      }
+    }
+  }
+  lastButton = currentButton;
+}
+
+// --- MODE: ENGRAVING (Single MOSFET Version) ---
+void doEngraving() {
+  float Frequency = map(analogRead(FrequencyPin), 0, 1023, 60, 2);
+  float Duty = map(analogRead(DutyPin), 0, 1023, 350, 10) / 1000.0;
+  float Period = 1000.0 / Frequency;
+  int pedal = analogRead(PedalPin);
+
+  if (pedal > 50) {
+    int pwm = map(pedal, 0, 255, 0, 275);
+    if (pwm > 255) pwm = 255;
+
+    unsigned long timeInCycle = millis() - PreviousTime;
+    // Only fire the single MOSFET during the "On" part of the duty cycle
+    if (timeInCycle < (Period * Duty)) {
+      analogWrite(MosfetPin, pwm);
+    } else {
+      stopSolenoid();
+    }
+    
+    if (timeInCycle >= Period) PreviousTime = millis();
+  } else {
+    stopSolenoid();
+  }
+}
+
+// --- MODE: CONTINUOUS HIT (Texture) ---
+void doContHit() {
+  float Period = 250.0; // 4Hz
+  int pedal = analogRead(PedalPin);
+
+  if (pedal > 50) {
+    unsigned long timeInCycle = millis() - PreviousTime;
+    if (timeInCycle < 25) { 
+      analogWrite(MosfetPin, 255);
+    } else {
+      stopSolenoid();
+    }
+    if (timeInCycle >= Period) PreviousTime = millis();
+  } else {
+    stopSolenoid();
+  }
+}
+
+void doStandby() { stopSolenoid(); }
+
+void doSingleShot() {
+  static bool fired = false;
+  if (analogRead(PedalPin) > 500 && !fired) {
+    analogWrite(MosfetPin, 255);
+    delay(20); // Pulse long enough for standard spring reset solenoids
+    stopSolenoid();
+    fired = true;
+  } else if (analogRead(PedalPin) < 100) {
+    fired = false;
+  }
+}
+
+void stopSolenoid() {
+  analogWrite(MosfetPin, 0);
+}
+
+void updateLCD() {
+  if (millis() - previousLCDMillis < lcdInterval) return;
+  previousLCDMillis = millis();
+
+  lcd.setCursor(0, 0);
+  if (isLocked) {
+    lcd.print("** LOCKED **    ");
+  } else {
+    lcd.print("MODE: ");
+    if (currentMode == STANDBY)     lcd.print("STANDBY ");
+    if (currentMode == ENGRAVE)     lcd.print("ENGRAVE ");
+    if (currentMode == CONT_HIT)    lcd.print("TEXTURE ");
+    if (currentMode == SINGLE_SHOT) lcd.print("SINGLE-S");
+  }
+  
+  lcd.setCursor(0, 1);
+  if (!isLocked) {
+    lcd.print("F:"); lcd.print(map(analogRead(FrequencyPin), 0, 1023, 60, 2));
+    lcd.print(" D:"); lcd.print(map(analogRead(DutyPin), 0, 1023, 35, 1));
+    lcd.print("%   ");
+  } else {
+    lcd.print("Press SELECT    ");
+  }
+}
