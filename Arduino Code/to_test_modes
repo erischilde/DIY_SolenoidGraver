@@ -1,0 +1,170 @@
+#include <LiquidCrystal.h>
+
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
+
+// Pins
+const int FrequencyPin = 2;
+const int DutyPin = 3;
+const int PedalPin = 5;
+const int MosfetPin1 = 6;
+const int MosfetPin2 = 11;
+
+// Operating Modes (Now with 4 modes)
+enum Mode { STANDBY, ENGRAVE, CONT_HIT, SINGLE_SHOT };
+Mode currentMode = STANDBY;
+
+bool isLocked = false; 
+int lastButton = 5;
+unsigned long PreviousTime = 0;
+unsigned long previousLCDMillis = 0;
+const long lcdInterval = 150; 
+
+void setup() {
+  pinMode(MosfetPin1, OUTPUT);
+  pinMode(MosfetPin2, OUTPUT);
+  lcd.begin(16, 2);
+  Serial.begin(115200);
+}
+
+void loop() {
+  checkButtons();   // Handle Up/Down cycling and Select for Lock
+  updateLCD();
+  
+  if (isLocked) {
+    stopSolenoid(); // Safety: Force off if locked
+    return;         // Skip all logic below
+  }
+
+  switch (currentMode) {
+    case STANDBY:     doStandby();    break;
+    case ENGRAVE:     doEngraving();  break; 
+    case CONT_HIT:    doContHit();    break; // Slow thumping
+    case SINGLE_SHOT: doSingleShot(); break;
+  }
+}
+
+// --- BUTTON LOGIC WITH CYCLING & LOCKING ---
+void checkButtons() {
+  int x = analogRead(0);
+  int currentButton;
+
+  if (x < 60) currentButton = 0;      // Right
+  else if (x < 200) currentButton = 1; // Up
+  else if (x < 400) currentButton = 2; // Down
+  else if (x < 600) currentButton = 3; // Left
+  else if (x < 800) currentButton = 4; // Select
+  else currentButton = 5;             // None
+
+  if (currentButton != lastButton && currentButton != 5) {
+    // 1. Toggle Lock with SELECT
+    if (currentButton == 4) {
+      isLocked = !isLocked;
+      lcd.clear();
+    }
+    
+    // 2. Cycle Modes (Only if NOT locked)
+    if (!isLocked) {
+      if (currentButton == 1) { // Cycle UP
+        currentMode = (currentMode == SINGLE_SHOT) ? STANDBY : (Mode)(currentMode + 1);
+        lcd.clear();
+      }
+      if (currentButton == 2) { // Cycle DOWN
+        currentMode = (currentMode == STANDBY) ? SINGLE_SHOT : (Mode)(currentMode - 1);
+        lcd.clear();
+      }
+    }
+  }
+  lastButton = currentButton;
+}
+
+// --- MODE: CONTINUOUS HIT (Texture/Slow Thump) ---
+void doContHit() {
+  // Fixed slow frequency (approx 4Hz) for texturing
+  float Period = 250.0; // 250ms = 4 hits per second
+  int pedal = analogRead(PedalPin);
+
+  if (pedal > 50) {
+    unsigned long timeInCycle = millis() - PreviousTime;
+    if (timeInCycle < 25) { // Hard 25ms pulse for punchy texture
+      analogWrite(MosfetPin1, 255);
+    } else {
+      stopSolenoid();
+    }
+    if (timeInCycle >= Period) PreviousTime = millis();
+  } else {
+    stopSolenoid();
+  }
+}
+
+// --- MODE: ENGRAVING (Your 40Hz Push-Pull Logic) ---
+void doEngraving() {
+  float Frequency = map(analogRead(FrequencyPin), 0, 1023, 60, 2);
+  float Duty = map(analogRead(DutyPin), 0, 1023, 350, 10) / 1000.0;
+  float Period = 1000.0 / Frequency;
+  int pedal = analogRead(PedalPin);
+
+  if (pedal > 50) {
+    int pwm = map(pedal, 0, 255, 0, 275);
+    if (pwm > 255) pwm = 255;
+
+    unsigned long timeInCycle = millis() - PreviousTime;
+    if (timeInCycle < (Period * Duty)) {
+      analogWrite(MosfetPin1, pwm);
+      analogWrite(MosfetPin2, 0);
+    } else if (timeInCycle < (Period * (Duty + 0.15))) { // Return pulse
+      analogWrite(MosfetPin1, 0);
+      analogWrite(MosfetPin2, pwm);
+    } else {
+      stopSolenoid();
+    }
+    if (timeInCycle >= Period) PreviousTime = millis();
+  } else {
+    stopSolenoid();
+  }
+}
+
+void doStandby() { stopSolenoid(); }
+
+void doSingleShot() {
+  static bool fired = false;
+  if (analogRead(PedalPin) > 500 && !fired) {
+    analogWrite(MosfetPin1, 255);
+    delay(15); // Slightly longer for heavy single strike
+    stopSolenoid();
+    fired = true;
+  } else if (analogRead(PedalPin) < 100) {
+    fired = false;
+  }
+}
+
+void stopSolenoid() {
+  analogWrite(MosfetPin1, 0);
+  analogWrite(MosfetPin2, 0);
+}
+
+void updateLCD() {
+  if (millis() - previousLCDMillis < lcdInterval) return;
+  previousLCDMillis = millis();
+
+  lcd.setCursor(0, 0);
+  if (isLocked) {
+    lcd.print("** LOCKED **    ");
+  } else {
+    lcd.print("MODE: ");
+    switch (currentMode) {
+      case STANDBY:     lcd.print("STANDBY "); break;
+      case ENGRAVE:     lcd.print("ENGRAVE "); break;
+      case CONT_HIT:    lcd.print("TEXTURE "); break;
+      case SINGLE_SHOT: lcd.print("SINGLE-S"); break;
+    }
+  }
+  
+  lcd.setCursor(0, 1);
+  if (!isLocked) {
+    lcd.print("F:"); lcd.print(map(analogRead(FrequencyPin), 0, 1023, 60, 2));
+    lcd.print(" D:"); lcd.print(map(analogRead(DutyPin), 0, 1023, 35, 1));
+    lcd.print("%   ");
+  } else {
+    lcd.print("Press SELECT    ");
+  }
+}
