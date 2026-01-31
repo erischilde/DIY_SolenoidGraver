@@ -1,0 +1,89 @@
+//written by Google AI suggestions, double check everything
+//
+
+The Summary of the Optimal Build:
+This configuration uses the 4oz coil, the L298N, the Halbach plunger, and the steel frame to hit 20-40Hz engraving speeds.
+Component	Specification
+Coil	Single, continuous 4oz (320 ft) 26AWG winding
+Driver	L298N in Parallel Mode (4A limit)
+Power	24V Supply (with 5V logic applied separately)
+Plunger	Acetal rod w/ 7 magnets & mild steel tips
+Logic	H-bridge for active push and pull (bidirectional)
+Summary of the Wiring Diagram:
+L298N Pin	Connection
+12V Terminal	+24V Power Supply
+GND Terminal	Power Supply (-) AND Arduino GND (Common Ground)
+5V Terminal	Arduino 5V Pin (MANDATORY: Remove "12V Jumper" first)
+OUT1 + OUT3	Coil Wire A (Bridge these two terminals)
+OUT2 + OUT4	Coil Wire B (Bridge these two terminals)
+ENA + ENB	Arduino Pin 6 (Remove jumpers)
+IN1 + IN3	Arduino Pin 10
+IN2 + IN4	Arduino Pin 11
+
+
+
+// ... [Include LiquidCrystal setup, global variables, and setup() function from previous code] ...
+
+// Pin Definitions - L298N Parallel Mode
+const int IN1_3 = 10;   
+const int IN2_4 = 11;   
+const int EN_A_B = 6;   // PWM Pin
+
+// ... [Include your setup(), loop(), checkButtons(), updateLCD() functions from previous code] ...
+
+// --- H-BRIDGE BIDIRECTIONAL CONTROL FUNCTIONS ---
+void fireStroke(int pwm) {
+  digitalWrite(IN1_3, HIGH);
+  digitalWrite(IN2_4, LOW);
+  analogWrite(EN_A_B, pwm);
+}
+
+void fireReturn(int pwm) {
+  digitalWrite(IN1_3, LOW);
+  digitalWrite(IN2_4, HIGH);
+  analogWrite(EN_A_B, pwm);
+}
+
+void stopSolenoid() {
+  digitalWrite(IN1_3, LOW);
+  digitalWrite(IN2_4, LOW);
+  analogWrite(EN_A_B, 0);
+}
+
+// --- MODES: OPTIMIZED FOR HALBACH + STEEL FRAME ---
+void doEngraving() {
+  float Frequency = map(analogRead(FrequencyPin), 0, 1023, 20, 40);
+  float Duty = map(analogRead(DutyPin), 0, 1023, 5, 25) / 100.0; // 5% to 25% duty
+  float Period = 1000.0 / Frequency;
+  int pedal = analogRead(PedalPin);
+
+  if (pedal > 50) {
+    int pwm = map(pedal, 0, 1023, 0, 255);
+    unsigned long timeInCycle = millis() - PreviousTime;
+    float pulseWidth = Period * Duty;
+
+    if (timeInCycle < pulseWidth) {
+      fireStroke(pwm); // Full 24V punch
+    } 
+    else if (timeInCycle < (pulseWidth + 5)) { 
+      stopSolenoid();  // 5ms "Dead Time" to collapse magnetic field
+    } 
+    else if (timeInCycle < (Period * 0.8)) { 
+      fireReturn(200); // Strong Active Return to "kick" it off the GRS holder
+    } 
+    else {
+      stopSolenoid();  // Rest before next hit
+    }
+    
+    if (timeInCycle >= Period) PreviousTime = millis();
+  } else {
+    stopSolenoid();
+  }
+}
+
+// ... [Include doTexture(), doSingleShot(), doStandby() functions, checkButtons() and updateLCD() functions here] ...
+Use code with caution.
+
+
+
+
