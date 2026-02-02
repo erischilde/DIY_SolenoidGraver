@@ -1,0 +1,21 @@
+//written by Google AI suggestions, double check everything
+//
+
+The Summary of the Optimal Build:
+This configuration uses the 4oz coil, the L298N, the Halbach plunger, and the steel frame to hit 20-40Hz engraving speeds.
+Component	Specification
+Coil	Single, continuous 4oz (320 ft) 26AWG winding
+Driver	L298N in Parallel Mode (4A limit)
+Power	24V Supply (with 5V logic applied separately)
+Plunger	Acetal rod w/ 7 magnets & mild steel tips
+Logic	H-bridge for active push and pull (bidirectional)
+Summary of the Wiring Diagram:
+L298N Pin	Connection
+12V Terminal	+24V Power Supply
+GND Terminal	Power Supply (-) AND Arduino GND (Common Ground)
+5V Terminal	Arduino 5V Pin (MANDATORY: Remove "12V Jumper" first)
+OUT1 + OUT3	Coil Wire A (Bridge these two terminals)
+OUT2 + OUT4	Coil Wire B (Bridge these two terminals)
+ENA + ENB	Arduino Pin 6 (Remove jumpers)
+IN1 + IN3	Arduino Pin 10
+IN2 + IN4	Arduino Pin 11
