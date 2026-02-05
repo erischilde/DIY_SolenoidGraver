@@ -23,6 +23,14 @@ Solenoids, magnets, and linear motors are complicated for such simple little dev
 
 
 ---
+# **Engraver Body**
+- i have left in the STL and CAD files from the orginal project, though i am machining my engraver body instead. I do test with 3d printed bodies, but because i've changed so much of the solenoid component, the stl files don't really apply anymore.
+- my first iteration was an aluminum tubular body, drilled out to accept the 13-30 solenoid, and then tapped at the impact side to accept the thread on the solenoid body. I used brass tube to hold a GRS style quick change tip, easy to shape and file in a locating tab.
+- Second version for the larger solenoid, also had an alumnium outer body, but i put a steel sleeve around the solenoid itself. The jf-1039 is an "open frame" style solenoid, i carefully removed the metal U shaped component and used the naked solenoid.
+- at the impact side, i used some M10 threaded rod, drilled out to 6.35mm diam to fit the QC holders, and a nut. A steel plug was turned and "compression fit" (read, hammered) into the bottom of the aluminum tube.
+- I tapped the bottom of the steel plug to M10 as well. This is so the bit holder can be screwed in and out to adjust sizing, and using a nut on the outside to lock it in place. None of these are final. 
+
+---
 # **The solenoid**
 - my initial build was based on a 13-30 solenoid from Aliexpress; the shape and format is awesome to work with, but i found it too light, but i also don't know what i'm doing. I'll keep tinkering with it for more delicate work.
 - second version is based off of a JF-1039 solenoid; maybe a bit overkill but gives me something to work with. They're relatively inexpensive, and easily available.
