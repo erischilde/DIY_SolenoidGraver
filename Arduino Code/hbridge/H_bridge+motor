@@ -3,14 +3,18 @@
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
+
+//PWN Pins avvailable 3, 5, 6, 9, 10, 11.
+
 // Pins
-const int FrequencyPin = 0;
-const int DutyPin = 1;
-const int MaxPwmPin = 3;
-const int PedalPin = 2;
-const int HBridge1 = 3;
-const int HBridge2 = 6;
+const int FrequencyPin = A0;
+const int DutyPin = A1;
+const int PedalPin = A2;
+const int ENA = 3;
 const int MosfetPin = 10;
+const int extend = 11;
+const int retract = 9;
+
 const int Button1 = 4; // Cycle Button
 const int Button2 = 7; // Standby Button
 
@@ -38,8 +42,9 @@ void setup() {
   pinMode(Button1, INPUT); 
   pinMode(Button2, INPUT); 
   pinMode(MosfetPin, OUTPUT);
-  pinMode(HBridge1, OUTPUT);
-  pinMode(HBridge2, OUTPUT);
+  pinMode(ENA, OUTPUT);
+  pinMode(extend, OUTPUT);
+  pinMode(retract, OUTPUT);
   
   lcd.init();
   lcd.backlight();
@@ -49,11 +54,11 @@ void setup() {
 void loop() {
   int rawFreq  = analogRead(FrequencyPin);
   int rawDuty  = analogRead(DutyPin);
-  int rawMax   = analogRead(MaxPwmPin);
+  int rawMax   = analogRead(DutyPin);
   int rawPedal = analogRead(PedalPin);
 
   checkButtons();   
-  updateLCD(rawFreq, rawDuty, rawMax);
+  updateLCD(rawFreq, rawDuty, rawMax, rawPedal);
   
   switch (currentMode) {
     case STANDBY:     doStandby();                             break;
@@ -111,7 +116,8 @@ void doMotor(int rawMax, int rawPedal) {
 }
 
 void doEngraving(int rawFreq, int rawDuty, int rawPedal) {
-  float Frequency = map(rawFreq, 0, 1023, 50, 2);
+  analogWrite(MosfetPin, 0);
+  float Frequency = map(rawFreq, 0, 1023, 60, 2);
   float Duty = map(rawDuty, 0, 1023, 300, 10) / 1000.0;
   float Period = 1000.0 / Frequency;
   if (rawPedal > 50) {
@@ -119,11 +125,13 @@ void doEngraving(int rawFreq, int rawDuty, int rawPedal) {
     if (pwm > 218) pwm = 255;
     unsigned long timeInCycle = millis() - PreviousTime;
     if (timeInCycle < (Period * Duty)) {
-      analogWrite(HBridge1, pwm);
-      analogWrite(HBridge2, 0);
-    } else if (timeInCycle < (Period * (Duty + 0.15))) {
-      analogWrite(HBridge1, 0);
-      analogWrite(HBridge2, pwm);
+      analogWrite(ENA, pwm);
+      digitalWrite(extend,HIGH);
+      digitalWrite(retract,LOW);
+    } else if (timeInCycle < ((Period * Duty)*2)) {
+      analogWrite(ENA, 255);
+      digitalWrite(extend,LOW);
+      digitalWrite(retract,HIGH);
     } else {
       stopSolenoid();
     }
@@ -139,23 +147,27 @@ void doStandby() {
 }
 
 void doSingleShot(int rawPedal) {
+  analogWrite(MosfetPin, 0);
   static bool fired = false;
-  if (rawPedal > 50 && !fired) {
-    analogWrite(HBridge1, 255);
-    delay(15); 
+  if (rawPedal > 100 && !fired) {
+    analogWrite(ENA, 255);
+    digitalWrite(extend,HIGH);
+    digitalWrite(retract,LOW);
+    delay(25); 
+    digitalWrite(extend,LOW);
+    digitalWrite(retract,HIGH);
     stopSolenoid();
     fired = true;
-  } else if (rawPedal < 100) {
+  } else if (rawPedal < 60) {
     fired = false;
   }
 }
 
 void stopSolenoid() {
-  analogWrite(HBridge1, 0);
-  analogWrite(HBridge2, 0);
+  analogWrite(ENA, 0);
 }
 
-void updateLCD(int rawFreq, int rawDuty, int rawMax) {
+void updateLCD(int rawFreq, int rawDuty, int rawMax, int rawPedal) {
   if (millis() - previousLCDMillis < lcdInterval) return;
   previousLCDMillis = millis();
 
@@ -168,12 +180,18 @@ void updateLCD(int rawFreq, int rawDuty, int rawMax) {
     case SINGLE_SHOT: lcd.print("SINGLE-S"); break;
   }
   
-  lcd.setCursor(0, 1);
-  lcd.print("F:"); lcd.print(map(rawFreq, 0, 1023, 60, 2));
-  lcd.print(" D:"); lcd.print(map(rawDuty, 0, 1023, 35, 1));
-  lcd.print("%   ");
-  lcd.setCursor(0, 2);
-  lcd.print("MaxPWM: "); lcd.print(map(rawMax, 0, 1023, 0, 255));
+  if (currentMode = MOTOR){
+    lcd.setCursor(0, 2);
+    lcd.print("MaxPWM: "); lcd.print(map(rawMax, 0, 1023, 0, 255));
+    lcd.setCursor(0, 1);
+    lcd.print("Speed:"); lcd.print(map(rawPedal, 0, 218, 0, 100));
+  }
+  else {
+    lcd.setCursor(0, 1);
+    lcd.print("F:"); lcd.print(map(rawFreq, 0, 1023, 60, 2));
+    lcd.print(" D:"); lcd.print(map(rawDuty, 0, 1023, 30, 1));
+    lcd.print("%   ");
+  }
   lcd.setCursor(0, 3);
   lcd.print("B1:Cycle B2:Stop");
 }
