@@ -135,7 +135,7 @@ void doEngraving(int rawFreq, int rawDuty, int rawPedal) {
       digitalWrite(extend,HIGH);
       digitalWrite(retract,LOW);
     } 
-    else if (timeInCycle < pulseWidth + 5) {
+    else if (timeInCycle < (pulseWidth + 5)) {
       analogWrite(ENA, 0);
       digitalWrite(extend,LOW);
       digitalWrite(retract,LOW);
