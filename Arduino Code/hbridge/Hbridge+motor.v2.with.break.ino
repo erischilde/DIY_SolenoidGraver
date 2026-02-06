@@ -1,6 +1,3 @@
-//this version includes a 5ms "break" between fire and retract to allow magnetic field to collapse. 
-//this is optimized for 20 to 40hz, but you left it at 2-60hz, so if there's issues with timing, check there. 
-
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -13,10 +10,10 @@ LiquidCrystal_I2C lcd(0x27, 20, 4);
 const int FrequencyPin = A0;
 const int DutyPin = A1;
 const int PedalPin = A2;
-const int ENA = 3;
+const int EN_A_B = 3;
 const int MosfetPin = 10;
-const int extend = 11;
-const int retract = 9;
+const int IN1_3 = 11;
+const int IN2_4 = 9;
 
 const int Button1 = 4; // Cycle Button
 const int Button2 = 7; // Standby Button
@@ -45,9 +42,9 @@ void setup() {
   pinMode(Button1, INPUT); 
   pinMode(Button2, INPUT); 
   pinMode(MosfetPin, OUTPUT);
-  pinMode(ENA, OUTPUT);
-  pinMode(extend, OUTPUT);
-  pinMode(retract, OUTPUT);
+  pinMode(EN_A_B, OUTPUT);
+  pinMode(IN1_3, OUTPUT);
+  pinMode(IN2_4, OUTPUT);
   
   lcd.init();
   lcd.backlight();
@@ -106,6 +103,24 @@ void checkButtons() {
   lastB2State = reading2;
 }
 
+// --- H-BRIDGE BIDIRECTIONAL CONTROL FUNCTIONS ---
+void fireStroke(int pwm) {
+  digitalWrite(IN1_3, HIGH);
+  digitalWrite(IN2_4, LOW);
+  analogWrite(EN_A_B, pwm);
+}
+
+void fireReturn(int pwm) {
+  digitalWrite(IN1_3, LOW);
+  digitalWrite(IN2_4, HIGH);
+  analogWrite(EN_A_B, pwm);
+}
+
+void stopSolenoid() {
+  digitalWrite(IN1_3, LOW);
+  digitalWrite(IN2_4, LOW);
+  analogWrite(EN_A_B, 0);
+}
 
 void doMotor(int rawMax, int rawPedal) {
   int maxpwm = map(rawMax, 0, 1023, 0, 255);
@@ -120,30 +135,24 @@ void doMotor(int rawMax, int rawPedal) {
 
 void doEngraving(int rawFreq, int rawDuty, int rawPedal) {
   analogWrite(MosfetPin, 0);
-  float Frequency = map(rawFreq, 0, 1023, 60, 2); //code this is taken from uses 20-40 hz, so if timing is off, maybe adjust this. 
+  float Frequency = map(rawFreq, 0, 1023, 10, 60);
   float Duty = map(rawDuty, 0, 1023, 5, 25) / 100.0;
   float Period = 1000.0 / Frequency;
-  
   if (rawPedal > 50) {
     int pwm = map(rawPedal, 0, 1023, 0, 255);
     if (pwm > 218) pwm = 255;
     unsigned long timeInCycle = millis() - PreviousTime;
-    float pulseWidth = Period * Duty;
-
-    if (timeInCycle < pulseWidth ) {
-      analogWrite(ENA, pwm);
-      digitalWrite(extend,HIGH);
-      digitalWrite(retract,LOW);
+    float pulsewidth = Period * Duty;
+    float breaker = pulsewidth + 5;
+    float ender = (pulsewidth*2)+5;
+    if (timeInCycle < pulsewidth) {
+      fireStroke(pwm);
+    }
+    else if (timeInCycle < breaker) {
+      stopSolenoid();
     } 
-    else if (timeInCycle < (pulseWidth + 5)) {
-      analogWrite(ENA, 0);
-      digitalWrite(extend,LOW);
-      digitalWrite(retract,LOW);
-    } 
-    else if ( timeInCycle < (Period * 0.8)){
-      analogWrite(ENA, 200);
-      digitalWrite(extend,LOW);
-      digitalWrite(retract,HIGH);
+    else if (timeInCycle < ender) {
+      fireReturn(200);
     }
     else {
       stopSolenoid();
@@ -163,12 +172,12 @@ void doSingleShot(int rawPedal) {
   analogWrite(MosfetPin, 0);
   static bool fired = false;
   if (rawPedal > 100 && !fired) {
-    analogWrite(ENA, 255);
-    digitalWrite(extend,HIGH);
-    digitalWrite(retract,LOW);
+    analogWrite(EN_A_B, 255);
+    digitalWrite(IN1_3,HIGH);
+    digitalWrite(IN2_4,LOW);
     delay(25); 
-    digitalWrite(extend,LOW);
-    digitalWrite(retract,HIGH);
+    digitalWrite(IN1_3,LOW);
+    digitalWrite(IN2_4,HIGH);
     stopSolenoid();
     fired = true;
   } else if (rawPedal < 60) {
@@ -176,9 +185,6 @@ void doSingleShot(int rawPedal) {
   }
 }
 
-void stopSolenoid() {
-  analogWrite(ENA, 0);
-}
 
 void updateLCD(int rawFreq, int rawDuty, int rawMax, int rawPedal) {
   if (millis() - previousLCDMillis < lcdInterval) return;
