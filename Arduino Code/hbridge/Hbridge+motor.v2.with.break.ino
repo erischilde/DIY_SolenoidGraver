@@ -19,7 +19,7 @@ const int Button1 = 4; // Cycle Button
 const int Button2 = 7; // Standby Button
 
 // Operating Modes
-enum Mode { STANDBY, ENGRAVE, MOTOR, SINGLE_SHOT };
+enum Mode { STANDBY, ENGRAVE, MOTOR, SINGLE_SHOT, MODE_COUNT };
 Mode currentMode = STANDBY;
 
 // Debounce & State Variables for Button 1
@@ -39,6 +39,9 @@ unsigned long previousLCDMillis = 0;
 const long lcdInterval = 150; 
 
 void setup() {
+  pinMode(FrequencyPin, INPUT); 
+  pinMode(DutyPin, INPUT);
+  pinMode(PedalPin, INPUT);
   pinMode(Button1, INPUT); 
   pinMode(Button2, INPUT); 
   pinMode(MosfetPin, OUTPUT);
@@ -48,6 +51,8 @@ void setup() {
   
   lcd.init();
   lcd.backlight();
+  lcd.setBacklight(150);
+  lcd.clear();
   Serial.begin(115200);
 }
 
@@ -79,6 +84,8 @@ void checkButtons() {
       confirmedB1State = reading1;
       if (confirmedB1State == HIGH) {
         currentMode = (currentMode == SINGLE_SHOT) ? STANDBY : (Mode)(currentMode + 1);
+        //currentMode = (Mode)((currentMode + 1) % MODE_COUNT);
+        Serial.println(currentMode);
         lcd.clear();
       }
     }
@@ -123,6 +130,7 @@ void stopSolenoid() {
 }
 
 void doMotor(int rawMax, int rawPedal) {
+//  Serial.println("doMotor");
   int maxpwm = map(rawMax, 0, 1023, 0, 255);
   int PWMout = map(rawPedal, 0, 1023, 0, maxpwm);
   if (PWMout >= 218) PWMout = 255;
@@ -134,10 +142,13 @@ void doMotor(int rawMax, int rawPedal) {
 }
 
 void doEngraving(int rawFreq, int rawDuty, int rawPedal) {
+//  Serial.println("Engrave");
   analogWrite(MosfetPin, 0);
   float Frequency = map(rawFreq, 0, 1023, 10, 60);
   float Duty = map(rawDuty, 0, 1023, 5, 25) / 100.0;
   float Period = 1000.0 / Frequency;
+  //Serial.println(Frequency);
+  Serial.println(Duty);
   if (rawPedal > 50) {
     int pwm = map(rawPedal, 0, 1023, 0, 255);
     if (pwm > 218) pwm = 255;
@@ -169,6 +180,7 @@ void doStandby() {
 }
 
 void doSingleShot(int rawPedal) {
+  Serial.println("single");
   analogWrite(MosfetPin, 0);
   static bool fired = false;
   if (rawPedal > 100 && !fired) {
@@ -199,7 +211,7 @@ void updateLCD(int rawFreq, int rawDuty, int rawMax, int rawPedal) {
     case SINGLE_SHOT: lcd.print("SINGLE-S"); break;
   }
   
-  if (currentMode = MOTOR){
+  if (currentMode == MOTOR){
     lcd.setCursor(0, 2);
     lcd.print("MaxPWM: "); lcd.print(map(rawMax, 0, 1023, 0, 255));
     lcd.setCursor(0, 1);
