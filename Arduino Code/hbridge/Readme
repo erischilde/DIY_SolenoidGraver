@@ -1,0 +1,8 @@
+There codes are not ready, are WIP or in testing. 
+
+- instead of using a simple mosfet for turning on and off a solenoid, we're using an H bridge to run the coil in both directions. 
+- instead of having a simple iron plunger, this is for a permanent magnetic core in the plunger. This creates something more akin to a linear DC motor; when the coil polarity is in one direction, it draws the plunger down into the QC holder
+- when the polarity is reversed, it draws the plunger up. 
+- this means that we don't need to have a spring to returning the plunger, and can more accurately control the speed and ideally, the length of stroke by changing the timing of each cycle. 
+
+
