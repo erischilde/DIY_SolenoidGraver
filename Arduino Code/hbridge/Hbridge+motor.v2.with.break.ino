@@ -167,7 +167,6 @@ void doMotor(int rawDuty, int rawPedal) {
 
 void doEngraving(int rawFreq, int rawDuty, int rawPedal) {
 //  Serial.println("Engrave");
-  analogWrite(MosfetPin, 0);
   float Frequency = map(rawFreq, 0, 1023, 10, 60);
   float Duty = map(rawDuty, 0, 1023, 5, 25) / 100.0;
   float Period = 1000.0 / Frequency;
