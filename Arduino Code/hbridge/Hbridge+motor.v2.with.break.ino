@@ -1,7 +1,7 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-LiquidCrystal_I2C lcd(0x27, 20, 4);
+LiquidCrystal_I2C lcd(0x3F, 20, 4);
 
 
 //PWN Pins avvailable 3, 5, 6, 9, 10, 11.
@@ -38,6 +38,14 @@ unsigned long PreviousTime = 0;
 unsigned long previousLCDMillis = 0;
 const long lcdInterval = 150; 
 
+//Analog Input Variables
+  int rawFreq  = 0;
+  int rawDuty  = 0;
+  int rawPedal = 0;
+// Delay variables for Potentiometer reads
+unsigned long potcheck = 0;
+
+
 void setup() {
   pinMode(FrequencyPin, INPUT); 
   pinMode(DutyPin, INPUT);
@@ -49,26 +57,20 @@ void setup() {
   pinMode(IN1_3, OUTPUT);
   pinMode(IN2_4, OUTPUT);
   
-  lcd.init();
+  lcd.begin();
   lcd.backlight();
-  lcd.setBacklight(150);
   lcd.clear();
   Serial.begin(115200);
 }
 
 void loop() {
-  int rawFreq  = analogRead(FrequencyPin);
-  int rawDuty  = analogRead(DutyPin);
-  int rawMax   = analogRead(DutyPin);
-  int rawPedal = analogRead(PedalPin);
-
   checkButtons();   
-  updateLCD(rawFreq, rawDuty, rawMax, rawPedal);
+  updateLCD(rawFreq, rawDuty, rawPedal);
   
   switch (currentMode) {
     case STANDBY:     doStandby();                             break;
     case ENGRAVE:     doEngraving(rawFreq, rawDuty, rawPedal); break; 
-    case MOTOR:       doMotor(rawMax, rawPedal);               break; 
+    case MOTOR:       doMotor(rawDuty, rawPedal);               break; 
     case SINGLE_SHOT: doSingleShot(rawPedal);                  break;
   }
 }
@@ -108,6 +110,17 @@ void checkButtons() {
     }
   }
   lastB2State = reading2;
+  //reading analog inputs
+  potcheck = millis();
+  if ((millis() - potcheck) > 50 ){
+    rawDuty = analogRead(DutyPin);
+  }
+  if ((millis() - potcheck) > 100 ){
+    rawFreq = analogRead(FrequencyPin);
+  }
+  if ((millis() - potcheck) > 150 ){
+    rawPedal = analogRead(PedalPin);
+  }
 }
 
 // --- H-BRIDGE BIDIRECTIONAL CONTROL FUNCTIONS ---
@@ -129,9 +142,9 @@ void stopSolenoid() {
   analogWrite(EN_A_B, 0);
 }
 
-void doMotor(int rawMax, int rawPedal) {
+void doMotor(int rawDuty, int rawPedal) {
 //  Serial.println("doMotor");
-  int maxpwm = map(rawMax, 0, 1023, 0, 255);
+  int maxpwm = map(rawDuty, 0, 1023, 0, 255);
   int PWMout = map(rawPedal, 0, 1023, 0, maxpwm);
   if (PWMout >= 218) PWMout = 255;
   if (rawPedal > 50) {
@@ -184,21 +197,41 @@ void doSingleShot(int rawPedal) {
   analogWrite(MosfetPin, 0);
   static bool fired = false;
   if (rawPedal > 100 && !fired) {
-    analogWrite(EN_A_B, 255);
-    digitalWrite(IN1_3,HIGH);
-    digitalWrite(IN2_4,LOW);
+    fireStroke(255);
     delay(25); 
-    digitalWrite(IN1_3,LOW);
-    digitalWrite(IN2_4,HIGH);
+    stopSolenoid();
+    fireReturn(200);
+    delay(25); 
     stopSolenoid();
     fired = true;
   } else if (rawPedal < 60) {
     fired = false;
   }
 }
+/*
+alternative test function to single shot, defining the wait time between fire/stop/retract
+void coilTest(int rawPedal, int rawDuty) {
+  int pwmval = map(rawPedal, 1, 1023, 0, 255);
+  int cycle = map(rawDuty, 1, 1023, 10, 50);
+  static bool fired = false;
+   if (pwmval > 100 && !fired) {
+    fireStroke(pwmval);
+    delay(cycle); 
+    stopSolenoid();
+    delay(cycle); 
+    fireReturn(pwmval);
+    delay(cycle); 
+    stopSolenoid();
+    fired = true;
+  }
+  if (pwmval < 60 && fired == true){
+    fired = false;
+  }
+}
+*/
 
 
-void updateLCD(int rawFreq, int rawDuty, int rawMax, int rawPedal) {
+void updateLCD(int rawFreq, int rawDuty, int rawPedal) {
   if (millis() - previousLCDMillis < lcdInterval) return;
   previousLCDMillis = millis();
 
@@ -213,14 +246,14 @@ void updateLCD(int rawFreq, int rawDuty, int rawMax, int rawPedal) {
   
   if (currentMode == MOTOR){
     lcd.setCursor(0, 2);
-    lcd.print("MaxPWM: "); lcd.print(map(rawMax, 0, 1023, 0, 255));
+    lcd.print("MaxPWM: "); lcd.print(map(rawDuty, 0, 1023, 0, 255));
     lcd.setCursor(0, 1);
     lcd.print("Speed:"); lcd.print(map(rawPedal, 0, 218, 0, 100));
   }
   else {
     lcd.setCursor(0, 1);
-    lcd.print("F:"); lcd.print(map(rawFreq, 0, 1023, 60, 2));
-    lcd.print(" D:"); lcd.print(map(rawDuty, 0, 1023, 30, 1));
+    lcd.print("F:"); lcd.print(map(rawFreq, 0, 1023, 2, 60));
+    lcd.print(" D:"); lcd.print(map(rawDuty, 0, 1023, 1, 30));
     lcd.print("%   ");
   }
   lcd.setCursor(0, 3);
