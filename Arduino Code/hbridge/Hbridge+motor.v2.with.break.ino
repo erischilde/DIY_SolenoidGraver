@@ -1,3 +1,14 @@
+/*
+moved the analog reading logic to the call buttoncheck, to create a delay in reading the analog potentiometer inputs. 
+depending on hardware configuration and other "magic", i've been getting cross talk, where adjusting the duty cycle will also adjust the frequency. 
+Apparently there are a couple fixes possible for this: 
+  - arduino has only one ADC, and polling too many Analog pins to rapidly can leave the (i blelieve capacitor itnernally) drained, meaning it's unable to read other pins quickly enough. 
+  - can delay the reads between pins
+  - can add decoupling cap between pin and ground
+  - use pots in the 5 and 10k range, to limit current draw on lower Ohm pots, and limit impedance on higher Ohm pots. 
+  - use start style wiring to ensure stable voltage between various pots.
+
+*/
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
